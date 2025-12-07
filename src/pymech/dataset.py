@@ -6,9 +6,14 @@ from pathlib import Path
 import numpy as np
 import uxarray as uxr
 import xarray as xr
+import netCDF4 as nc
 from xarray.core.utils import Frozen
 
 from .neksuite import readnek
+
+from matplotlib.patches import Polygon
+from matplotlib.collections import PatchCollection
+import matplotlib as mp
 
 __all__ = (
     "open_dataset",
@@ -26,6 +31,14 @@ nek_ext_pattern = re.compile(
     re.VERBOSE,
 )
 
+exo_ext_pattern = re.compile(
+    r"""
+    .*         # one or more characters
+    \.         # character "."
+    (exo|e)    # "exo" or 'e'
+""",
+    re.VERBOSE,
+)
 
 def can_open_nek_dataset(path):
     """A regular expression check of the file extension.
@@ -33,10 +46,11 @@ def can_open_nek_dataset(path):
     .. hint::
 
         - Would not match: .f90 .f .fort .f0000
-        - Would match: .fld .f00001 .f12345
+        - Would match: .fld .f00001 .f12345, .exo, .e
 
     """
-    return nek_ext_pattern.match(str(path))
+
+    return (nek_ext_pattern.match(str(path)) or exo_ext_pattern.match(str(path)))
 
 
 def open_dataset(path, **kwargs):
@@ -265,30 +279,45 @@ class _NekDataStore(xr.backends.common.AbstractDataStore):
 
 def _open_nek_dataset_unstruct(path):
     # Proposed Methodology
-    # Step 1: Use readnek to import the data
-    # Step 2: Create an array of nodes, elements, and fields
-    # Step 3: Create a grid and xarray dataset from the data array
-    # Step 4: Create a uxarray dataset and return it
+    # Step 1: Read the exodus data and plot it.
+    # Step 2: Find the polynomial order data automatically from the visualization file.
+    # Step 3: Implement a method to estimate the GLL nodes on each edge, find them in the nodes data and arrange them.
+    # Step 4: Create a connectivity data from them.
+    # Step 5: Create a ugrid from this for further use.
 
-    field = readnek(path)
-    if isinstance(field, int):
-        raise OSError(f"Failed to load {path}")
 
-    elements = field.elem
+    # Step 1: Read the exodus data and plot it.
 
-    # Method 1 : adapt the existing method used for xarray
+    mesh = nc.Dataset(path)
+    X = mesh.variables['coordx']
+    Y = mesh.variables['coordy']
+    connect = mesh.variables['connect1']
+    xy = np.array([X[:], Y[:]]).T
+    patches = []
+    for coords in xy[connect[:]-1]:
+        quad = Polygon(coords[:4], closed=False)
+        patches.append(quad)
 
-    # elem_stores = [_NekDataStore(elem) for elem in elements]
-    #
-    # try:
-    #     elem_dsets = [
-    #         uxr.UxDataset.load_store(store).set_coords(store.axes) for store in elem_stores
-    #     ]
-    # except Exception as error:
-    #     print("uxarray failure")
-    #     print(error)
-    #     print(elem_stores[0].axes)
+    fig, ax = mp.pyplot.subplots()
+    colors = 100 * np.random.rand(len(patches))
+    p = PatchCollection(patches, cmap=mp.cm.coolwarm, alpha=0.4)
+    p.set_array(np.array(colors))
+    ax.add_collection(p)
+    ax.set_xlim([-4, 4])
+    ax.set_ylim([-2, 2])
+    ax.set_aspect('equal')
+    mp.pyplot.show()
+    
+    # QUAD8 Connectivity Order: 
+    # Corner Nodes: Top-Left to Top-Right in CW
+    # Middle Nodes: Left Side to Top Side in CW
 
-    # Method 2 : manually create array of x, y, z and variables and use it to
-    # make a uxarray dataset
-    ds = extract_elem_data(elements)
+    # field = readnek(path)
+    # if isinstance(field, int):
+    #     raise OSError(f"Failed to load {path}")
+
+    # elements = field.elem
+
+    # Method: Manually create array of x, y, z and variables and use it to
+    # make a uxarray dataset along with manually created connectivity data.
+    # ds = extract_elem_data(elements)
