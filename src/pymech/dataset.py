@@ -3,17 +3,16 @@ import re
 from functools import partial
 from pathlib import Path
 
+import matplotlib as mp
+import netCDF4 as nc
 import numpy as np
 import uxarray as uxr
 import xarray as xr
-import netCDF4 as nc
+from matplotlib.collections import PatchCollection
+from matplotlib.patches import Polygon
 from xarray.core.utils import Frozen
 
 from .neksuite import readnek
-
-from matplotlib.patches import Polygon
-from matplotlib.collections import PatchCollection
-import matplotlib as mp
 
 __all__ = (
     "open_dataset",
@@ -40,6 +39,7 @@ exo_ext_pattern = re.compile(
     re.VERBOSE,
 )
 
+
 def can_open_nek_dataset(path):
     """A regular expression check of the file extension.
 
@@ -50,7 +50,7 @@ def can_open_nek_dataset(path):
 
     """
 
-    return (nek_ext_pattern.match(str(path)) or exo_ext_pattern.match(str(path)))
+    return nek_ext_pattern.match(str(path)) or exo_ext_pattern.match(str(path))
 
 
 def open_dataset(path, **kwargs):
@@ -285,16 +285,15 @@ def _open_nek_dataset_unstruct(path):
     # Step 4: Create a connectivity data from them.
     # Step 5: Create a ugrid from this for further use.
 
-
     # Step 1: Read the exodus data and plot it.
 
     mesh = nc.Dataset(path)
-    X = mesh.variables['coordx']
-    Y = mesh.variables['coordy']
-    connect = mesh.variables['connect1']
+    X = mesh.variables["coordx"]
+    Y = mesh.variables["coordy"]
+    connect = mesh.variables["connect1"]
     xy = np.array([X[:], Y[:]]).T
     patches = []
-    for coords in xy[connect[:]-1]:
+    for coords in xy[connect[:] - 1]:
         quad = Polygon(coords[:4], closed=False)
         patches.append(quad)
 
@@ -305,10 +304,10 @@ def _open_nek_dataset_unstruct(path):
     ax.add_collection(p)
     ax.set_xlim([-4, 4])
     ax.set_ylim([-2, 2])
-    ax.set_aspect('equal')
+    ax.set_aspect("equal")
     mp.pyplot.show()
-    
-    # QUAD8 Connectivity Order: 
+
+    # QUAD8 Connectivity Order:
     # Corner Nodes: Top-Left to Top-Right in CW
     # Middle Nodes: Left Side to Top Side in CW
 
